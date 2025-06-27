@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import Link from "next/link";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,8 +26,17 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gradient-to-br from-[#18181c] via-[#23232a] to-[#101014] text-white min-h-screen`}
       >
+        <nav className="sticky top-0 z-50 w-full bg-white/10 backdrop-blur-xl border-b border-white/20 shadow-[0_4px_32px_0_rgba(0,0,0,0.10)] flex items-center justify-between px-6 py-4 rounded-b-2xl">
+          <span className="text-xl font-bold tracking-wide text-white/90 drop-shadow">HealthCareX</span>
+          <div className="flex gap-6 text-base">
+            <Link href="/" className="hover:text-cyan-400 transition">Home</Link>
+            <a href="#services" className="hover:text-cyan-400 transition">Services</a>
+            <a href="#about" className="hover:text-cyan-400 transition">About</a>
+            <a href="#contact" className="hover:text-cyan-400 transition">Contact</a>
+          </div>
+        </nav>
         {children}
       </body>
     </html>
