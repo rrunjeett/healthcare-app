@@ -1,255 +1,531 @@
 "use client";
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Sphere, Float, Html, Box, TorusKnot, Line } from "@react-three/drei";
+
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import * as THREE from "three";
-import React, { useRef, useState } from "react";
-import { useFrame } from "@react-three/fiber";
-import { Pacifico } from "next/font/google";
+import { format, subDays } from "date-fns";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
+import {
+  Activity,
+  Heart,
+  TrendingUp,
+  TrendingDown,
+  Calendar,
+  Target,
+  Plus,
+  Play,
+  Zap,
+  Moon,
+  Droplets,
+  Scale,
+} from "lucide-react";
+import {
+  getHealthMetrics,
+  getTodaysActivities,
+  getTodaysNutrition,
+  getGoals,
+  generateSampleData,
+  getLatestMetric,
+  addHealthMetric,
+  addActivity,
+  type HealthMetric,
+  type Activity as ActivityType,
+  type Goal,
+} from "@/lib/health-data";
 
-const pacifico = Pacifico({ weight: "400", subsets: ["latin"], variable: "--font-pacifico" });
-
-function GlassySphere({ color, position, icon }: { color: string; position: [number, number, number]; icon: string }) {
-  return (
-    <Float speed={2} rotationIntensity={1} floatIntensity={2}>
-      <Sphere args={[0.5, 64, 64]} position={position}>
-        <meshStandardMaterial color={color} transparent opacity={0.7} />
-      </Sphere>
-      <Html center position={position} style={{ pointerEvents: 'none' }}>
-        <span style={{ fontSize: 32 }}>{icon}</span>
-      </Html>
-    </Float>
-  );
+interface DashboardCard {
+  title: string;
+  value: string;
+  unit: string;
+  icon: any;
+  color: string;
+  trend?: number;
 }
 
-function Service3DCard({ icon, color }: { icon: string; color: string }) {
-  return (
-    <Float speed={1.5} rotationIntensity={0.7} floatIntensity={1.5}>
-      <Box args={[1, 1, 1]}>
-        <meshStandardMaterial color={color} transparent opacity={0.6} />
-      </Box>
-      <Html center style={{ pointerEvents: 'none' }}>
-        <span style={{ fontSize: 32 }}>{icon}</span>
-      </Html>
-    </Float>
-  );
+interface QuickActionModal {
+  isOpen: boolean;
+  type: 'metric' | 'activity' | null;
 }
 
-function DNAHelix() {
-  // Generate points for a simple DNA double helix
-  const points1: [number, number, number][] = [];
-  const points2: [number, number, number][] = [];
-  for (let i = 0; i < 100; i++) {
-    const t = i * 0.2;
-    points1.push([
-      Math.cos(t) * 0.5,
-      (i - 50) * 0.04,
-      Math.sin(t) * 0.5,
-    ]);
-    points2.push([
-      -Math.cos(t) * 0.5,
-      (i - 50) * 0.04,
-      -Math.sin(t) * 0.5,
-    ]);
-  }
-  return (
-    <>
-      <Line points={points1} color="#06b6d4" lineWidth={2} />
-      <Line points={points2} color="#f472b6" lineWidth={2} />
-      {/* Connecting rungs */}
-      {points1.map((p, i) =>
-        i % 8 === 0 ? (
-          <Line key={i} points={[p, points2[i]]} color="#fff" lineWidth={1} />
-        ) : null
-      )}
-    </>
-  );
-}
+export default function Dashboard() {
+  const [healthMetrics, setHealthMetrics] = useState<HealthMetric[]>([]);
+  const [todaysActivities, setTodaysActivities] = useState<ActivityType[]>([]);
+  const [todaysNutrition, setTodaysNutrition] = useState<any[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [quickAction, setQuickAction] = useState<QuickActionModal>({ isOpen: false, type: null });
+  const [newMetricValue, setNewMetricValue] = useState('');
+  const [selectedMetricType, setSelectedMetricType] = useState<HealthMetric['type']>('weight');
 
-function Contact3DIcon() {
-  // 3D envelope using TorusKnot for a stylized look
-  return (
-    <Float speed={1.2} rotationIntensity={1.2} floatIntensity={1.2}>
-      <TorusKnot args={[0.5, 0.18, 100, 16]}>
-        <meshStandardMaterial color="#facc15" transparent opacity={0.7} />
-      </TorusKnot>
-    </Float>
-  );
-}
-
-function FireEffect({ visible }: { visible: boolean }) {
-  const group = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
-    if (group.current) {
-      const t = clock.getElapsedTime();
-      group.current.scale.set(1.2 + Math.sin(t * 16) * 0.18, 1.5 + Math.abs(Math.sin(t * 12)) * 0.3, 1.2 + Math.sin(t * 18) * 0.18);
-      group.current.position.y = 1.4 + Math.sin(t * 10) * 0.09;
+  useEffect(() => {
+    // Initialize with sample data if no data exists
+    const existingMetrics = getHealthMetrics();
+    if (existingMetrics.length === 0) {
+      generateSampleData();
     }
+    
+    loadData();
+  }, []);
+
+  const loadData = () => {
+    setHealthMetrics(getHealthMetrics());
+    setTodaysActivities(getTodaysActivities());
+    setTodaysNutrition(getTodaysNutrition());
+    setGoals(getGoals());
+  };
+
+  const handleAddMetric = () => {
+    if (!newMetricValue) return;
+    
+    const units: Record<HealthMetric['type'], string> = {
+      weight: 'kg',
+      steps: 'steps',
+      sleep_hours: 'hours',
+      water_intake: 'L',
+      heart_rate: 'bpm',
+      blood_pressure_systolic: 'mmHg',
+      blood_pressure_diastolic: 'mmHg',
+      calories_burned: 'cal'
+    };
+
+    addHealthMetric({
+      date: new Date().toISOString().split('T')[0],
+      type: selectedMetricType,
+      value: parseFloat(newMetricValue),
+      unit: units[selectedMetricType]
+    });
+
+    setNewMetricValue('');
+    setQuickAction({ isOpen: false, type: null });
+    loadData();
+  };
+
+  const handleAddQuickActivity = (type: ActivityType['type'], duration: number, calories: number) => {
+    addActivity({
+      date: new Date().toISOString().split('T')[0],
+      type,
+      duration,
+      calories
+    });
+    setQuickAction({ isOpen: false, type: null });
+    loadData();
+  };
+
+  // Prepare chart data
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const date = subDays(new Date(), 6 - i);
+    return format(date, 'MMM dd');
   });
-  if (!visible) return null;
-  return (
-    <group ref={group} position={[0, 1.2, 0]}>
-      {/* Main flame */}
-      <mesh>
-        <coneGeometry args={[0.28, 0.8, 24]} />
-        <meshStandardMaterial color="#ff3c00" transparent opacity={0.85} emissive="#ff3c00" emissiveIntensity={1.2} />
-      </mesh>
-      {/* Middle flame */}
-      <mesh position={[0, 0.22, 0]}>
-        <coneGeometry args={[0.16, 0.45, 20]} />
-        <meshStandardMaterial color="#ffb300" transparent opacity={0.8} emissive="#ffb300" emissiveIntensity={1.5} />
-      </mesh>
-      {/* Inner flame */}
-      <mesh position={[0, 0.36, 0]}>
-        <coneGeometry args={[0.09, 0.22, 16]} />
-        <meshStandardMaterial color="#fff176" transparent opacity={0.9} emissive="#fff176" emissiveIntensity={2.2} />
-      </mesh>
-      {/* Flicker spheres */}
-      <mesh position={[0.13, 0.28, 0]}>
-        <sphereGeometry args={[0.07, 12, 12]} />
-        <meshStandardMaterial color="#ffd54f" transparent opacity={0.8} emissive="#ffd54f" emissiveIntensity={1.7} />
-      </mesh>
-      <mesh position={[-0.11, 0.18, 0.03]}>
-        <sphereGeometry args={[0.06, 12, 12]} />
-        <meshStandardMaterial color="#ffb300" transparent opacity={0.8} emissive="#ffb300" emissiveIntensity={1.7} />
-      </mesh>
-    </group>
-  );
-}
 
-function Stethoscope({ onClick, fire }: { onClick: () => void; fire: boolean }) {
-  const group = useRef<THREE.Group>(null);
-  useFrame(() => {
-    if (group.current) {
-      group.current.rotation.y += 0.01;
-      group.current.rotation.x += 0.005;
-    }
+  const weightData = last7Days.map(day => {
+    const dayMetrics = healthMetrics.filter(m => 
+      m.type === 'weight' && format(new Date(m.date), 'MMM dd') === day
+    );
+    return {
+      day,
+      weight: dayMetrics.length > 0 ? dayMetrics[0].value : 0
+    };
   });
-  return (
-    <group ref={group} position={[0, 0, 0]} scale={[1.8, 1.8, 1.8]} onClick={onClick}>
-      {/* Tube */}
-      <mesh position={[0, 0, 0]}>
-        <cylinderGeometry args={[0.12, 0.12, 3.2, 32]} />
-        <meshStandardMaterial color="#444" />
-      </mesh>
-      {/* Earpiece */}
-      <mesh position={[0, 1.7, 0]}>
-        <sphereGeometry args={[0.28, 32, 32]} />
-        <meshStandardMaterial color="#666" />
-      </mesh>
-      {/* Diaphragm */}
-      <mesh position={[0, -1.7, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.5, 32]} />
-        <meshStandardMaterial color="#888" />
-      </mesh>
-      {/* Fire effect */}
-      <FireEffect visible={fire} />
-      {/* Cursor overlay for pointer */}
-      <Html center position={[0, 0, 1.2]} style={{ pointerEvents: 'none' }}>
-        <div style={{ width: 60, height: 60, cursor: 'pointer', position: 'absolute', top: 0, left: 0 }} />
-      </Html>
-    </group>
+
+  const stepsData = last7Days.map(day => {
+    const dayMetrics = healthMetrics.filter(m => 
+      m.type === 'steps' && format(new Date(m.date), 'MMM dd') === day
+    );
+    return {
+      day,
+      steps: dayMetrics.length > 0 ? dayMetrics[0].value : 0
+    };
+  });
+
+  const nutritionSummary = todaysNutrition.reduce(
+    (acc, entry) => ({
+      calories: acc.calories + entry.calories,
+      protein: acc.protein + entry.protein,
+      carbs: acc.carbs + entry.carbs,
+      fat: acc.fat + entry.fat,
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
-}
 
-export default function Home() {
-  const [fire, setFire] = useState(false);
-  React.useEffect(() => {
-    if (fire) {
-      const t = setTimeout(() => setFire(false), 2000);
-      return () => clearTimeout(t);
-    }
-  }, [fire]);
+  const macroData = [
+    { name: 'Protein', value: nutritionSummary.protein, color: '#10B981' },
+    { name: 'Carbs', value: nutritionSummary.carbs, color: '#3B82F6' },
+    { name: 'Fat', value: nutritionSummary.fat, color: '#F59E0B' },
+  ];
+
+  // Dashboard cards data
+  const dashboardCards: DashboardCard[] = [
+    {
+      title: 'Steps Today',
+      value: getLatestMetric('steps')?.value.toLocaleString() || '0',
+      unit: 'steps',
+      icon: Activity,
+      color: 'text-blue-400',
+      trend: 5.2
+    },
+    {
+      title: 'Current Weight',
+      value: getLatestMetric('weight')?.value.toFixed(1) || '0',
+      unit: 'kg',
+      icon: Scale,
+      color: 'text-green-400',
+      trend: -2.1
+    },
+    {
+      title: 'Sleep Last Night',
+      value: getLatestMetric('sleep_hours')?.value.toFixed(1) || '0',
+      unit: 'hours',
+      icon: Moon,
+      color: 'text-purple-400',
+      trend: 8.3
+    },
+    {
+      title: 'Water Intake',
+      value: getLatestMetric('water_intake')?.value.toFixed(1) || '0',
+      unit: 'L',
+      icon: Droplets,
+      color: 'text-cyan-400',
+      trend: 12.5
+    },
+  ];
+
   return (
-    <main className={`bg-gradient-to-br from-[#0a0a0a] via-[#18181c] to-[#050509] min-h-screen w-full flex flex-col items-center ${pacifico.variable}`}>
-      {/* Hero Section */}
-      <section className="w-full flex flex-col md:flex-row items-center justify-between py-24 px-6 md:px-20 gap-10" id="hero">
-        <div className="flex-1 flex flex-col gap-6 items-start">
-          <motion.h1 initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }} className="text-6xl md:text-8xl font-bold text-[#ff3c00] mb-4 drop-shadow-lg font-[var(--font-pacifico),cursive] italic">
-            Welcome to <span className="text-[#ffd54f] font-[var(--font-pacifico),cursive] italic">HealthCareX</span>
-          </motion.h1>
-          <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.8 }} className="text-2xl md:text-3xl text-[#fff176] max-w-xl font-[var(--font-pacifico),cursive] italic font-bold drop-shadow">
-            Your health, our priority. Modern, secure, and accessible healthcare for everyone.
-          </motion.p>
-          <motion.a href="#services" whileHover={{ scale: 1.05 }} className="mt-6 inline-block bg-[#ff3c00]/90 text-white font-bold px-10 py-5 rounded-2xl shadow-2xl hover:bg-[#ffd54f]/90 transition backdrop-blur-xl text-2xl font-[var(--font-pacifico),cursive] italic">
-            Explore Services
-          </motion.a>
-        </div>
-        <div className="flex-1 flex items-center justify-center min-h-[350px]">
-          <Canvas style={{ height: 350, width: 350 }} camera={{ position: [0, 0, 5] }} shadows>
-            <ambientLight intensity={1.1} />
-            <directionalLight position={[2, 2, 2]} intensity={1.5} castShadow />
-            {/* Glassy spheres with medical icons */}
-            <GlassySphere color="#ff3c00" position={[-1.2, 0.7, 0]} icon="❤️" />
-            <GlassySphere color="#ffd54f" position={[1.2, -0.7, 0]} icon="💊" />
-            <GlassySphere color="#fff176" position={[0, 1.2, 0]} icon="🩺" />
-            <GlassySphere color="#ffb300" position={[0.7, -1.2, 0]} icon="🧬" />
-            {/* Improved Stethoscope 3D element with fire on click */}
-            <Float speed={1.2} rotationIntensity={1.2} floatIntensity={1.2}>
-              <Stethoscope onClick={() => setFire(true)} fire={fire} />
-            </Float>
-            <OrbitControls enableZoom={false} />
-          </Canvas>
-        </div>
-      </section>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 p-4 md:p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
+            Health Dashboard
+          </h1>
+          <p className="text-gray-300">
+            {format(new Date(), 'EEEE, MMMM do, yyyy')}
+          </p>
+        </motion.div>
 
-      {/* Services Section */}
-      <section id="services" className="w-full max-w-6xl py-20 px-6 md:px-0 flex flex-col items-center">
-        <motion.h2 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }} className="text-5xl md:text-6xl font-bold mb-12 text-[#ff3c00] drop-shadow font-[var(--font-pacifico),cursive] italic">Our Services</motion.h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 w-full">
-          {[{icon: "💬", color: "#ff3c00"}, {icon: "📋", color: "#ffd54f"}, {icon: "📅", color: "#fff176"}].map((service, i) => (
-            <motion.div key={service.icon} initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1, duration: 0.7 }} className="bg-[#18181c]/90 backdrop-blur-2xl rounded-2xl p-12 shadow-2xl flex flex-col items-center text-center border border-[#ff3c00]/30 hover:scale-105 hover:bg-[#0a0a0a]/90 transition-transform duration-300">
-              <div className="w-24 h-24 mb-4 flex items-center justify-center">
-                <Canvas style={{ height: 80, width: 80 }} camera={{ position: [0, 0, 2.5] }}>
-                  <ambientLight intensity={0.7} />
-                  <Service3DCard icon={service.icon} color={service.color} />
-                </Canvas>
+        {/* Quick Actions */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mb-8"
+        >
+          <div className="flex flex-wrap gap-4">
+            <button
+              onClick={() => setQuickAction({ isOpen: true, type: 'metric' })}
+              className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Metric</span>
+            </button>
+            <button
+              onClick={() => setQuickAction({ isOpen: true, type: 'activity' })}
+              className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              <Play className="h-4 w-4" />
+              <span>Log Activity</span>
+            </button>
+          </div>
+        </motion.div>
+
+        {/* Dashboard Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {dashboardCards.map((card, index) => (
+            <motion.div
+              key={card.title}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 + index * 0.1 }}
+              className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <card.icon className={`h-8 w-8 ${card.color}`} />
+                <div className="flex items-center space-x-1">
+                  {card.trend && card.trend > 0 ? (
+                    <TrendingUp className="h-4 w-4 text-green-400" />
+                  ) : (
+                    <TrendingDown className="h-4 w-4 text-red-400" />
+                  )}
+                  <span className={`text-sm ${card.trend && card.trend > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {card.trend && Math.abs(card.trend)}%
+                  </span>
+                </div>
               </div>
-              <h3 className="text-2xl font-bold text-[#ffd54f] mb-2 drop-shadow font-[var(--font-pacifico),cursive] italic">{i === 0 ? "24/7 Telemedicine" : i === 1 ? "EHR Management" : "Appointment Scheduling"}</h3>
-              <p className="text-[#fff176] font-bold font-[var(--font-pacifico),cursive] italic">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque euismod.</p>
+              <h3 className="text-gray-300 text-sm font-medium mb-1">{card.title}</h3>
+              <div className="flex items-baseline space-x-2">
+                <span className="text-2xl font-bold text-white">{card.value}</span>
+                <span className="text-gray-400 text-sm">{card.unit}</span>
+              </div>
             </motion.div>
           ))}
         </div>
-      </section>
 
-      {/* About Section */}
-      <section id="about" className="w-full max-w-4xl py-20 px-6 md:px-0 flex flex-col items-center">
-        <motion.h2 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }} className="text-4xl md:text-5xl font-bold mb-8 text-cyan-400 drop-shadow font-[var(--font-pacifico),cursive] italic">About Us</motion.h2>
-        <div className="w-full flex flex-col md:flex-row items-center gap-10">
-          <motion.p initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }} className="text-xl text-white/80 text-center md:text-left flex-1 font-[var(--font-pacifico),cursive] italic">
-            HealthCareX is dedicated to providing innovative, secure, and accessible healthcare solutions. Our team of professionals is passionate about improving patient outcomes through technology and compassion.
-          </motion.p>
-          <div className="flex-1 flex items-center justify-center min-h-[250px]">
-            <Canvas style={{ height: 220, width: 220 }} camera={{ position: [0, 0, 3] }}>
-              <ambientLight intensity={0.7} />
-              <directionalLight position={[2, 2, 2]} intensity={1.2} />
-              <DNAHelix />
-              <OrbitControls enableZoom={false} />
-            </Canvas>
-          </div>
-        </div>
-      </section>
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          {/* Weight Trend */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+          >
+            <h2 className="text-xl font-semibold text-white mb-4">Weight Trend</h2>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={weightData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="day" stroke="#9CA3AF" />
+                <YAxis stroke="#9CA3AF" />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#1F2937', 
+                    border: '1px solid #374151',
+                    borderRadius: '8px',
+                    color: '#F9FAFB'
+                  }}
+                />
+                <Line type="monotone" dataKey="weight" stroke="#10B981" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </motion.div>
 
-      {/* Contact Section */}
-      <section id="contact" className="w-full max-w-2xl py-20 px-6 md:px-0 flex flex-col items-center">
-        <motion.h2 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }} className="text-4xl md:text-5xl font-bold mb-8 text-cyan-400 drop-shadow font-[var(--font-pacifico),cursive] italic">Contact Us</motion.h2>
-        <div className="w-full flex flex-col md:flex-row gap-8 items-center">
-          <form className="w-full flex flex-col gap-4 bg-white/10 backdrop-blur-xl p-10 rounded-2xl border border-white/20 shadow-xl md:flex-1">
-            <input type="text" placeholder="Your Name" className="bg-white/5 border border-white/20 rounded px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:border-cyan-400 transition" />
-            <input type="email" placeholder="Your Email" className="bg-white/5 border border-white/20 rounded px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:border-cyan-400 transition" />
-            <textarea placeholder="Your Message" className="bg-white/5 border border-white/20 rounded px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:border-cyan-400 transition" rows={4} />
-            <button type="submit" className="bg-cyan-400/80 text-black font-semibold px-8 py-3 rounded-xl shadow-lg hover:bg-cyan-300/80 transition backdrop-blur-xl">Send Message</button>
-          </form>
-          <div className="flex-1 flex items-center justify-center min-h-[180px]">
-            <Canvas style={{ height: 120, width: 120 }} camera={{ position: [0, 0, 2.5] }}>
-              <ambientLight intensity={0.7} />
-              <Contact3DIcon />
-              <OrbitControls enableZoom={false} />
-            </Canvas>
-          </div>
+          {/* Steps Chart */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.7 }}
+            className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+          >
+            <h2 className="text-xl font-semibold text-white mb-4">Daily Steps</h2>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={stepsData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="day" stroke="#9CA3AF" />
+                <YAxis stroke="#9CA3AF" />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#1F2937', 
+                    border: '1px solid #374151',
+                    borderRadius: '8px',
+                    color: '#F9FAFB'
+                  }}
+                />
+                <Bar dataKey="steps" fill="#3B82F6" />
+              </BarChart>
+            </ResponsiveContainer>
+          </motion.div>
         </div>
-      </section>
-    </main>
+
+        {/* Today's Summary */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Nutrition */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8 }}
+            className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+          >
+            <h2 className="text-xl font-semibold text-white mb-4">Today's Nutrition</h2>
+            <div className="mb-4">
+              <p className="text-2xl font-bold text-white">{nutritionSummary.calories.toFixed(0)}</p>
+              <p className="text-gray-300 text-sm">calories consumed</p>
+            </div>
+            {macroData.length > 0 && (
+              <ResponsiveContainer width="100%" height={150}>
+                <PieChart>
+                  <Pie
+                    data={macroData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={40}
+                    outerRadius={60}
+                    dataKey="value"
+                  >
+                    {macroData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </motion.div>
+
+          {/* Activities */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.9 }}
+            className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+          >
+            <h2 className="text-xl font-semibold text-white mb-4">Today's Activities</h2>
+            <div className="space-y-4">
+              {todaysActivities.length === 0 ? (
+                <p className="text-gray-300 text-sm">No activities logged today</p>
+              ) : (
+                todaysActivities.map((activity, index) => (
+                  <div key={index} className="flex items-center justify-between">
+                    <div>
+                      <p className="text-white font-medium capitalize">{activity.type}</p>
+                      <p className="text-gray-300 text-sm">{activity.duration} minutes</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-orange-400 font-semibold">{activity.calories} cal</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+
+          {/* Goals Progress */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.0 }}
+            className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+          >
+            <h2 className="text-xl font-semibold text-white mb-4">Goals Progress</h2>
+            <div className="space-y-4">
+              {goals.length === 0 ? (
+                <p className="text-gray-300 text-sm">No goals set</p>
+              ) : (
+                goals.slice(0, 3).map((goal, index) => {
+                  const progress = (goal.current / goal.target) * 100;
+                  return (
+                    <div key={index}>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-white font-medium">{goal.title}</p>
+                        <span className="text-sm text-gray-300">{progress.toFixed(0)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-700 rounded-full h-2">
+                        <div
+                          className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${Math.min(progress, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </motion.div>
+        </div>
+      </div>
+
+      {/* Quick Action Modal */}
+      {quickAction.isOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-slate-800 rounded-xl p-6 w-full max-w-md border border-slate-600"
+          >
+            <h3 className="text-xl font-semibold text-white mb-4">
+              {quickAction.type === 'metric' ? 'Add Health Metric' : 'Log Activity'}
+            </h3>
+            
+            {quickAction.type === 'metric' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Metric Type
+                  </label>
+                  <select
+                    value={selectedMetricType}
+                    onChange={(e) => setSelectedMetricType(e.target.value as HealthMetric['type'])}
+                    className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                  >
+                    <option value="weight">Weight (kg)</option>
+                    <option value="steps">Steps</option>
+                    <option value="sleep_hours">Sleep Hours</option>
+                    <option value="water_intake">Water Intake (L)</option>
+                    <option value="heart_rate">Heart Rate (bpm)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Value
+                  </label>
+                  <input
+                    type="number"
+                    value={newMetricValue}
+                    onChange={(e) => setNewMetricValue(e.target.value)}
+                    className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                    placeholder="Enter value"
+                  />
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleAddMetric}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Add Metric
+                  </button>
+                  <button
+                    onClick={() => setQuickAction({ isOpen: false, type: null })}
+                    className="flex-1 bg-slate-600 hover:bg-slate-700 text-white py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {quickAction.type === 'activity' && (
+              <div className="space-y-4">
+                <p className="text-gray-300 mb-4">Quick Activity Logging</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => handleAddQuickActivity('walking', 30, 150)}
+                    className="p-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors"
+                  >
+                    30min Walk
+                  </button>
+                  <button
+                    onClick={() => handleAddQuickActivity('running', 30, 300)}
+                    className="p-3 bg-red-600 hover:bg-red-700 rounded-lg text-white transition-colors"
+                  >
+                    30min Run
+                  </button>
+                  <button
+                    onClick={() => handleAddQuickActivity('cycling', 45, 400)}
+                    className="p-3 bg-green-600 hover:bg-green-700 rounded-lg text-white transition-colors"
+                  >
+                    45min Bike
+                  </button>
+                  <button
+                    onClick={() => handleAddQuickActivity('strength', 60, 250)}
+                    className="p-3 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+                  >
+                    60min Gym
+                  </button>
+                </div>
+                <button
+                  onClick={() => setQuickAction({ isOpen: false, type: null })}
+                  className="w-full bg-slate-600 hover:bg-slate-700 text-white py-2 px-4 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
+    </div>
   );
 }
 
